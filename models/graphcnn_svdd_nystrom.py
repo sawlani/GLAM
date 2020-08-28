@@ -212,7 +212,7 @@ class GraphCNN_SVDD(nn.Module):
         h = F.relu(h)
         return h
 
-    def get_hidden_rep(self, batch_graph, output_layer):
+    def forward(self, batch_graph, output_layer):
         X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
         
         if self.neighbor_pooling_type == "max":
@@ -249,7 +249,7 @@ class GraphCNN_SVDD(nn.Module):
 
         return embeddings
 
-    
+    '''
     def forward(self, batch_graph, K_Z, Z_embeddings, gamma):
         embeddings = self.get_hidden_rep(batch_graph, 1)
 
@@ -260,15 +260,14 @@ class GraphCNN_SVDD(nn.Module):
         SIG_Z = torch.diag(eigenvalues**-0.5)
         T = torch.matmul(U_Z,SIG_Z)
 
-        K_RZ = torch.zeros(r,k)
-        for i in range(r):
-            for j in range(k):
-                K_RZ[i][j] = rbf_mmd_old(embeddings[i], Z_embeddings[j], gamma=gamma)
-
+        K_RZ = compute_mmd_gram_matrix(embeddings, Z_embeddings, gamma=gamma)
+        
         F = torch.matmul(K_RZ, T)
+        
 
         return F
 
+    
     def compute_kernel(self, Z):
         Z_embeddings = self.get_hidden_rep(Z, 1)
 
@@ -278,11 +277,7 @@ class GraphCNN_SVDD(nn.Module):
         
         gamma = 1/torch.median(torch.cdist(all_vertex_embeddings, all_vertex_embeddings)**2)
         
-        K_Z = torch.zeros(k,k)
-        for i in range(k):
-            for j in range(i,k):
-
-                K_Z[i][j] = rbf_mmd_old(Z_embeddings[i], Z_embeddings[j], gamma=gamma)
-                K_Z[j][i] = K_Z[i][j]
-
+        K_Z = compute_mmd_gram_matrix(Z_embeddings, gamma=gamma)
+        
         return K_Z, Z_embeddings, gamma
+    '''

@@ -48,7 +48,7 @@ def rbf_mmd(X, Y, gamma="median"):
     
     return torch.mean(torch.exp(-1*gamma* torch.cdist(X,Y)**2))
 
-def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='auto'):
+def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
     
     if Y_embeddings:
         n1 = len(X_embeddings)
@@ -57,7 +57,7 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='auto'):
         
         for i in range(n1):
             for j in range(n2):
-                MMD_values[i][j] = rbf_mmd(X_embeddings[i], Y_embeddings[j], gamma)
+                MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], Y_embeddings[j], gamma)
     
     else:
         n = len(X_embeddings)
@@ -65,7 +65,7 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='auto'):
         
         for i in range(n):
             for j in range(i,n):
-                MMD_values[i][j] = rbf_mmd(X_embeddings[i], X_embeddings[j], gamma)
+                MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], X_embeddings[j], gamma)
                 MMD_values[j][i] = MMD_values[i][j]
     
     return MMD_values

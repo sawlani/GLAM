@@ -30,71 +30,43 @@ def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_siz
     Z_index = a[:k]
     Z = [train_graphs[i] for i in Z_index]
 
-    #Z_embeddings = model.get_hidden_rep(Z,1)
-    #K_Z = compute_mmd_gram_matrix(Z_embeddings)
+    Z_embeddings = model(Z, 1)
 
-    K_Z, Z_embeddings, gamma = model.compute_kernel(Z)
+    all_vertex_embeddings = torch.cat(Z_embeddings, axis=0).detach()
+    gamma = 1/torch.median(torch.cdist(all_vertex_embeddings, all_vertex_embeddings)**2)
+    
+    K_Z = compute_mmd_gram_matrix(Z_embeddings, gamma=gamma)
+    
+    eigenvalues, U_Z = torch.symeig(K_Z, eigenvectors=True)
+    SIG_Z = torch.diag(eigenvalues**-0.5)
+    T = torch.matmul(U_Z,SIG_Z)
 
-    #eigenvalues, U_Z = torch.symeig(K_Z, eigenvectors=True)
-    #SIG_Z = torch.diag(eigenvalues**-0.5)
-    #T = torch.matmul(U_Z,SIG_Z)
-
-    
-    
-    
     F_list = []
-    #F_full = torch.zeros(N,k, requires_grad=True)
-
+    
     for start in range(0, N, batch_size):
         print(".", end='')
         batch_graph = train_graphs[start:start+batch_size]
 
-        #R_embeddings = model.get_hidden_rep(batch_graph,1)
-        #K_RZ = compute_mmd_gram_matrix(R_embeddings, Z_embeddings)
-        #F = torch.matmul(K_RZ, T)
-        F = model(batch_graph, K_Z, Z_embeddings, gamma)
+        R_embeddings = model(batch_graph,1)
+        K_RZ = compute_mmd_gram_matrix(R_embeddings, Z_embeddings, gamma=gamma)
+        F = torch.matmul(K_RZ, T)
         
         F_list.append(F)
 
     F_full = torch.cat(F_list, axis=0)
 
-    #center = torch.mean(F_full, dim=0)
+    center = torch.mean(F_full, dim=0)
 
-    #dists = torch.sum((F_full - center)**2, dim=1)
-    
-    
-    K = torch.matmul(F_full, torch.transpose(F_full, 0, 1))
-
-    alphas = torch.tensor([1/N]*N, requires_grad=False)
-    alpha_matrix = torch.ger(alphas, alphas)
-
-    diag = torch.diag(K)
-    row_dots = torch.matmul(K, alphas)
-    total_dot = torch.dot(torch.flatten(alpha_matrix), torch.flatten(K))
-    dists = diag - 2*row_dots + total_dot
-    
+    dists = torch.sum((F_full - center)**2, dim=1)
     
     print(dists)
-    #print(R)
+    
     #scores = torch.clamp(dists - (R**2), min=0)
 
-    #radius = model.radius
-    #print(radius)
-    
     #weight = model.svm.weight.squeeze()
-    
-    #labels = torch.LongTensor([graph.label for graph in train_graphs]).to(device)
-    #labels[labels == 0] = -1  # Replace zeros with -1
-
-    #labels = torch.LongTensor([graph.label for graph in train_graphs]).to(device)    
-
-    #output = torch.flatten(output)
-    #losses = torch.clamp(1 - output * labels, min=0) # hinge loss (unregularized)
-
     #loss = 20*torch.mean(scores) + (R**2)
 
     loss = torch.mean(dists)
-
     #loss += torch.dot(weight,weight)/ 2.0
 
     
