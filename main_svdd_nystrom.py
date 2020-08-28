@@ -32,17 +32,23 @@ def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_siz
 
     Z_embeddings = model(Z, 1)
 
+    
     all_vertex_embeddings = torch.cat(Z_embeddings, axis=0).detach()
     gamma = 1/torch.median(torch.cdist(all_vertex_embeddings, all_vertex_embeddings)**2)
     
     K_Z = compute_mmd_gram_matrix(Z_embeddings, gamma=gamma)
     
     eigenvalues, U_Z = torch.symeig(K_Z, eigenvectors=True)
-    SIG_Z = torch.diag(eigenvalues**-0.5)
-    T = torch.matmul(U_Z,SIG_Z)
+    T = torch.matmul(U_Z,torch.diag(eigenvalues**-0.5))
 
-    F_list = []
+    F_Z = torch.matmul(U_Z,torch.diag(eigenvalues**0.5))
+
+    approx_center = torch.mean(F_Z, dim=0)
+
+    #F_list = []
     
+    dists_batch_list = []
+
     for start in range(0, N, batch_size):
         print(".", end='')
         batch_graph = train_graphs[start:start+batch_size]
@@ -51,13 +57,17 @@ def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_siz
         K_RZ = compute_mmd_gram_matrix(R_embeddings, Z_embeddings, gamma=gamma)
         F = torch.matmul(K_RZ, T)
         
-        F_list.append(F)
+        #F_list.append(F)
 
-    F_full = torch.cat(F_list, axis=0)
+        dists_batch = torch.sum((F - approx_center)**2, dim=1)
+        dists_batch_list.append(dists_batch)
 
-    center = torch.mean(F_full, dim=0)
+    #F_full = torch.cat(F_list, axis=0)
 
-    dists = torch.sum((F_full - center)**2, dim=1)
+    #center = torch.mean(F_full, dim=0)
+
+    #dists = torch.sum((F_full - center)**2, dim=1)
+    dists = torch.cat(dists_batch_list, axis=0)
     
     print(dists)
     
