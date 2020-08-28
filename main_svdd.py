@@ -5,31 +5,37 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_fscore_support, average_precision_score
+
 
 from util import load_synthetic_data, load_chem_data, separate_data
 from mmd_util import compute_mmd_gram_matrix, mmd_score
-from models.graphcnn_svm import GraphCNN_SVM
+from models.graphcnn_svdd import GraphCNN_SVDD
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
-def train(args, model, device, train_graphs, optimizer, epoch):
+def train(args, model, device, train_graphs, optimizer, epoch, lmbd=1):
     
     model.train()
     
     batch_graph = train_graphs
     output= model(batch_graph)
-    weight = model.svm.weight.squeeze()
+    print(output)
+    #radius = model.radius
+    #print(radius)
     
-    labels = torch.LongTensor([graph.label for graph in train_graphs]).to(device)
-    labels[labels == 0] = -1  # Replace zeros with -1
+    #weight = model.svm.weight.squeeze()
+    
+    #labels = torch.LongTensor([graph.label for graph in train_graphs]).to(device)
+    #labels[labels == 0] = -1  # Replace zeros with -1
 
     #labels = torch.LongTensor([graph.label for graph in train_graphs]).to(device)    
 
-    output = torch.flatten(output)
-    losses = torch.clamp(1 - output * labels, min=0) # hinge loss (unregularized)
+    #output = torch.flatten(output)
+    #losses = torch.clamp(1 - output * labels, min=0) # hinge loss (unregularized)
 
-    loss = torch.mean(losses)
+    loss = torch.mean(output) # + (lmbd/2)*(radius**2)
 
     #loss += torch.dot(weight,weight)/ 2.0
 
@@ -80,18 +86,16 @@ def test(args, model, device, test_graphs):
     '''
 
     output = model(test_graphs)
-    preds = torch.sign(output)
+    scores = output.detach().numpy()
+    #preds = (output == 0)
     
     labels = torch.LongTensor([graph.label for graph in test_graphs]).to(device)
-    labels[labels == 0] = -1
+    
 
-    correct = preds.eq(labels.view_as(preds)).sum().cpu().item()
-    acc_test = correct / float(len(test_graphs))
-    
-    #print("accuracy train: %f test: %f" % (acc_train, acc_test))
-    
-    #return acc_train, acc_test
-    return acc_test
+    #p, r, f, _ = precision_recall_fscore_support(labels, preds, average="binary")
+    score = average_precision_score(labels, scores)
+    #return p,r,f
+    return score
 
 def main():
     # Training settings
@@ -143,7 +147,7 @@ def main():
         torch.cuda.manual_seed_all(0)
 
     if args.dataset == "mixhop":
-        graphs, num_classes = load_synthetic_data(100,0.5)
+        graphs, num_classes = load_synthetic_data(100,0.05)
     else:
         graphs, num_classes = load_chem_data()
 
@@ -151,8 +155,7 @@ def main():
     #train_graphs, test_graphs = separate_data(graphs,args.seed,args.fold_idx, 2)
     train_graphs, test_graphs = graphs, graphs
 
-    model = GraphCNN_SVM(len(train_graphs), args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
-    #model2 = SVM(len(train_graphs))
+    model = GraphCNN_SVDD(len(train_graphs), args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
     
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -166,20 +169,10 @@ def main():
         
         scheduler.step()
 
-        acc_train = test(args, model, device, train_graphs)
-        acc_test = test(args, model, device, test_graphs)
-        print("Training accuracy: %f, Testing accuracy: %f" % (acc_train, acc_test))
+        score = test(args, model, device, test_graphs)
+        #print("Precision: %f, Recall: %f, F-1 score: %f" % (p, r,f))
+        print("Avg Precision Score: %f" % score)
 
-
-        '''
-        if not args.filename == "":
-            with open(args.filename, 'w') as f:
-                f.write("%f %f" % (avg_loss, acc_train))
-                f.write("\n")
-        print("")
-
-        print(model.eps)
-        '''
 
     #for layer in range(args.num_layers):
     #    print("Hidden Layer: %d" % (layer+1))

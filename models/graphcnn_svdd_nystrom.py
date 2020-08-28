@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mmd_util import compute_mmd_gram_matrix, rbf_mmd
+from mmd_util import compute_mmd_gram_matrix, rbf_mmd, rbf_mmd_old
 
 class MLP2layer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -26,7 +26,7 @@ class MLP2layer(nn.Module):
         return x
         
 
-class GraphCNN_SVM(nn.Module):
+class GraphCNN_SVDD(nn.Module):
     def __init__(self, num_graphs, num_layers, num_mlp_layers, input_dim, hidden_dim, output_dim, final_dropout, learn_eps, graph_pooling_type, neighbor_pooling_type, device):
         '''
             num_layers: number of layers in the neural networks (INCLUDING the input layer)
@@ -41,7 +41,7 @@ class GraphCNN_SVM(nn.Module):
             device: which device to use
         '''
 
-        super(GraphCNN_SVM, self).__init__()
+        super(GraphCNN_SVDD, self).__init__()
 
         self.final_dropout = final_dropout
         self.device = device
@@ -73,9 +73,7 @@ class GraphCNN_SVM(nn.Module):
             else:
                 self.linears_prediction.append(nn.Linear(hidden_dim, output_dim))
 
-        self.svm = nn.Linear(num_graphs,1)
-        #self.svm_test = nn.Linear(hidden_dim,1)
-
+        
 
     def __preprocess_neighbors_maxpool(self, batch_graph):
         ###create padded_neighbor_list in concatenated graph
@@ -214,42 +212,6 @@ class GraphCNN_SVM(nn.Module):
         h = F.relu(h)
         return h
 
-    '''
-    def forward(self, batch_graph):
-        X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
-        graph_pool = self.__preprocess_graphpool(batch_graph)
-
-        if self.neighbor_pooling_type == "max":
-            padded_neighbor_list = self.__preprocess_neighbors_maxpool(batch_graph)
-        else:
-            Adj_block = self.__preprocess_neighbors_sumavepool(batch_graph)
-
-        #list of hidden representation at each layer (including input)
-        hidden_rep = [X_concat]
-        h = X_concat
-
-        for layer in range(self.num_layers-1):
-            if self.neighbor_pooling_type == "max" and self.learn_eps:
-                h = self.next_layer_eps(h, layer, padded_neighbor_list = padded_neighbor_list)
-            elif not self.neighbor_pooling_type == "max" and self.learn_eps:
-                h = self.next_layer_eps(h, layer, Adj_block = Adj_block)
-            elif self.neighbor_pooling_type == "max" and not self.learn_eps:
-                h = self.next_layer(h, layer, padded_neighbor_list = padded_neighbor_list)
-            elif not self.neighbor_pooling_type == "max" and not self.learn_eps:
-                h = self.next_layer(h, layer, Adj_block = Adj_block)
-
-            hidden_rep.append(h)
-
-        score_over_layer = 0
-    
-        #perform pooling over all nodes in each graph in every layer
-        for layer, h in enumerate(hidden_rep):
-            pooled_h = torch.spmm(graph_pool, h)
-            score_over_layer += F.dropout(self.linears_prediction[layer](pooled_h), self.final_dropout, training = self.training)
-
-        return score_over_layer
-    
-    '''
     def get_hidden_rep(self, batch_graph, output_layer):
         X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
         
@@ -288,47 +250,39 @@ class GraphCNN_SVM(nn.Module):
         return embeddings
 
     
-    def forward(self, batch_graph):
-        embeddings = self.get_hidden_rep(batch_graph, 2)
+    def forward(self, batch_graph, K_Z, Z_embeddings, gamma):
+        embeddings = self.get_hidden_rep(batch_graph, 1)
 
-        #print(embeddings[0].shape)
-        n = len(embeddings)
-        #print(len(embeddings))
-        #mean_emb = torch.zeros(len(embeddings),embeddings[0].shape[1])
+        k = K_Z.shape[0]
+        r = len(batch_graph)
 
-        #for i, embedding in enumerate(embeddings):
-            #print(embedding.shape)
-            #print(torch.mean(embedding, dim=0).shape)
-            #mean_emb[i,:] = torch.mean(embedding, dim=0)
-        MMD_values = torch.zeros(n,n)
-    
-        for i in range(n):
-            for j in range(i,n):
+        eigenvalues, U_Z = torch.symeig(K_Z, eigenvectors=True)
+        SIG_Z = torch.diag(eigenvalues**-0.5)
+        T = torch.matmul(U_Z,SIG_Z)
 
-                MMD_values[i][j] = rbf_mmd(embeddings[i], embeddings[j], 1)
-                #MMD_values[i][j] = torch.dot(torch.mean(embeddings[i], dim=0), torch.mean(embeddings[j], dim=0))
-                MMD_values[j][i] = MMD_values[i][j]
-        #MMD_values = compute_mmd_gram_matrix(embeddings)
+        K_RZ = torch.zeros(r,k)
+        for i in range(r):
+            for j in range(k):
+                K_RZ[i][j] = rbf_mmd_old(embeddings[i], Z_embeddings[j], gamma=gamma)
 
-        output = self.svm(MMD_values)
-        #output = self.svm_test(mean_emb)
+        F = torch.matmul(K_RZ, T)
 
-        return output
-    
-'''
-class SVM(nn.Module):
-    """
-    Linear Support Vector Machine
-    -----------------------------
-    This SVM is a subclass of the PyTorch nn module that
-    implements the Linear  function. The  size  of  each 
-    input sample is input_dimension and output sample  is 1.
-    """
-    def __init__(self, input_dimension):
-        super().__init__()  # Call the init function of nn.Module
-        self.fully_connected = nn.Linear(input_dimension, 1)  # Implement the Linear function
+        return F
+
+    def compute_kernel(self, Z):
+        Z_embeddings = self.get_hidden_rep(Z, 1)
+
+        k = len(Z_embeddings)
+
+        all_vertex_embeddings = torch.cat(Z_embeddings, axis=0).detach()
         
-    def forward(self, x):
-        fwd = self.fully_connected(x)  # Forward pass
-        return fwd
-'''
+        gamma = 1/torch.median(torch.cdist(all_vertex_embeddings, all_vertex_embeddings)**2)
+        
+        K_Z = torch.zeros(k,k)
+        for i in range(k):
+            for j in range(i,k):
+
+                K_Z[i][j] = rbf_mmd_old(Z_embeddings[i], Z_embeddings[j], gamma=gamma)
+                K_Z[j][i] = K_Z[i][j]
+
+        return K_Z, Z_embeddings, gamma

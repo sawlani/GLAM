@@ -105,11 +105,13 @@ def draw_graph(G, name):
     plt.savefig(name)
     plt.close()
 
-def load_synthetic_data(number_of_graphs, n_min = 50, n_max = 150, no_of_tags = 5, type1 = "mixhop", type2 = "mixhop"):
+def load_synthetic_data(number_of_graphs, outlier_ratio=0.5, n_min = 50, n_max = 150, no_of_tags = 5, type1 = "mixhop", type2 = "mixhop"):
     print('generating data')
     g_list = []
     
-    for i in range(number_of_graphs//2):
+    number_of_outliers = int(number_of_graphs*outlier_ratio)
+
+    for i in range(number_of_graphs - number_of_outliers):
         
         n = np.random.randint(n_min, n_max)
         tag_counts = random_split_counts(n, no_of_tags)
@@ -121,13 +123,13 @@ def load_synthetic_data(number_of_graphs, n_min = 50, n_max = 150, no_of_tags = 
         g_list.append(S2VGraph(g, 0, node_tags=tags))
     #draw_graph(g, "g1.jpg")
     
-    for i in range(number_of_graphs//2, number_of_graphs):
+    for i in range(number_of_graphs - number_of_outliers, number_of_graphs):
         
         n = np.random.randint(n_min, n_max)
         tag_counts = random_split_counts(n, no_of_tags)
 
         if type2 == "mixhop":
-            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, 0.5)
+            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, 1)
             tags = [g.nodes[v]['color'] for v in g.nodes]
         
         g_list.append(S2VGraph(g, 1, node_tags=tags))
@@ -159,6 +161,7 @@ def load_synthetic_data(number_of_graphs, n_min = 50, n_max = 150, no_of_tags = 
 
     print('Maximum node tag: %d' % len(tagset))
     print("Number of graphs generated: %d" % (number_of_graphs))
+    print("Number of outlier graphs generated: %d" % (number_of_outliers))
 
     return g_list, 2
 
@@ -199,5 +202,17 @@ def load_chem_data(file = "dataset/bace/raw/bace.csv"):
     return g_list, 2
 
 
-#def mmd2outlierpredictionscore(MMD_scores):
+def separate_data(graph_list, seed, fold_idx=0, splits=10):
+    assert 0 <= fold_idx and fold_idx < 10, "fold_idx must be from 0 to 9."
+    skf = StratifiedKFold(n_splits=splits, shuffle = True, random_state = seed)
 
+    labels = [graph.label for graph in graph_list]
+    idx_list = []
+    for idx in skf.split(np.zeros(len(labels)), labels):
+        idx_list.append(idx)
+    train_idx, test_idx = idx_list[fold_idx]
+
+    train_graph_list = [graph_list[i] for i in train_idx]
+    test_graph_list = [graph_list[i] for i in test_idx]
+
+    return train_graph_list, test_graph_list

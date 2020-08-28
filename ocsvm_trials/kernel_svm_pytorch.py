@@ -42,7 +42,7 @@ Y[Y == 0] = -1  # Replace zeros with -1
 
 learning_rate = 0.01  # Learning rate
 epoch = 10  # Number of epochs
-batch_size = 1  # Batch size
+batch_size = 500  # Batch size
 
 K = torch.FloatTensor(K)  # Convert X and Y to FloatTensors
 Y = torch.FloatTensor(Y)
@@ -74,6 +74,9 @@ for epoch in range(epoch):
         optimizer.zero_grad()  # Manually zero the gradient buffers of the optimizer
         output = model(k)  # Compute the output by doing a forward pass
         
+        output = torch.flatten(output)
+        #print(output.shape)
+        #print(y.shape)
         loss = torch.mean(torch.clamp(1 - output * y, min=0))  # hinge loss
         loss.backward()  # Backpropagation
         optimizer.step()  # Optimize and adjust weights

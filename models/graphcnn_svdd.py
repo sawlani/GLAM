@@ -26,7 +26,7 @@ class MLP2layer(nn.Module):
         return x
         
 
-class GraphCNN_SVM(nn.Module):
+class GraphCNN_SVDD(nn.Module):
     def __init__(self, num_graphs, num_layers, num_mlp_layers, input_dim, hidden_dim, output_dim, final_dropout, learn_eps, graph_pooling_type, neighbor_pooling_type, device):
         '''
             num_layers: number of layers in the neural networks (INCLUDING the input layer)
@@ -41,7 +41,7 @@ class GraphCNN_SVM(nn.Module):
             device: which device to use
         '''
 
-        super(GraphCNN_SVM, self).__init__()
+        super(GraphCNN_SVDD, self).__init__()
 
         self.final_dropout = final_dropout
         self.device = device
@@ -50,6 +50,9 @@ class GraphCNN_SVM(nn.Module):
         self.neighbor_pooling_type = neighbor_pooling_type
         self.learn_eps = learn_eps
         self.eps = nn.Parameter(torch.zeros(self.num_layers-1))
+
+        #self.radius = nn.Parameter(torch.tensor(0.1))
+        self.alphas = torch.tensor([1/num_graphs]*num_graphs, requires_grad=False)
 
         ###List of MLPs
         self.mlps = torch.nn.ModuleList()
@@ -73,9 +76,7 @@ class GraphCNN_SVM(nn.Module):
             else:
                 self.linears_prediction.append(nn.Linear(hidden_dim, output_dim))
 
-        self.svm = nn.Linear(num_graphs,1)
-        #self.svm_test = nn.Linear(hidden_dim,1)
-
+        
 
     def __preprocess_neighbors_maxpool(self, batch_graph):
         ###create padded_neighbor_list in concatenated graph
@@ -214,42 +215,6 @@ class GraphCNN_SVM(nn.Module):
         h = F.relu(h)
         return h
 
-    '''
-    def forward(self, batch_graph):
-        X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
-        graph_pool = self.__preprocess_graphpool(batch_graph)
-
-        if self.neighbor_pooling_type == "max":
-            padded_neighbor_list = self.__preprocess_neighbors_maxpool(batch_graph)
-        else:
-            Adj_block = self.__preprocess_neighbors_sumavepool(batch_graph)
-
-        #list of hidden representation at each layer (including input)
-        hidden_rep = [X_concat]
-        h = X_concat
-
-        for layer in range(self.num_layers-1):
-            if self.neighbor_pooling_type == "max" and self.learn_eps:
-                h = self.next_layer_eps(h, layer, padded_neighbor_list = padded_neighbor_list)
-            elif not self.neighbor_pooling_type == "max" and self.learn_eps:
-                h = self.next_layer_eps(h, layer, Adj_block = Adj_block)
-            elif self.neighbor_pooling_type == "max" and not self.learn_eps:
-                h = self.next_layer(h, layer, padded_neighbor_list = padded_neighbor_list)
-            elif not self.neighbor_pooling_type == "max" and not self.learn_eps:
-                h = self.next_layer(h, layer, Adj_block = Adj_block)
-
-            hidden_rep.append(h)
-
-        score_over_layer = 0
-    
-        #perform pooling over all nodes in each graph in every layer
-        for layer, h in enumerate(hidden_rep):
-            pooled_h = torch.spmm(graph_pool, h)
-            score_over_layer += F.dropout(self.linears_prediction[layer](pooled_h), self.final_dropout, training = self.training)
-
-        return score_over_layer
-    
-    '''
     def get_hidden_rep(self, batch_graph, output_layer):
         X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
         
@@ -274,8 +239,8 @@ class GraphCNN_SVM(nn.Module):
 
             hidden_rep.append(h)
 
-        #hidden_rep = torch.cat(hidden_rep, axis=1)
-        hidden_rep = hidden_rep[output_layer]
+        hidden_rep = torch.cat(hidden_rep, axis=1)
+        #hidden_rep = hidden_rep[output_layer]
     
         index = 0
         embeddings = []
@@ -289,46 +254,26 @@ class GraphCNN_SVM(nn.Module):
 
     
     def forward(self, batch_graph):
-        embeddings = self.get_hidden_rep(batch_graph, 2)
+        embeddings = self.get_hidden_rep(batch_graph, 1)
 
-        #print(embeddings[0].shape)
         n = len(embeddings)
-        #print(len(embeddings))
-        #mean_emb = torch.zeros(len(embeddings),embeddings[0].shape[1])
-
-        #for i, embedding in enumerate(embeddings):
-            #print(embedding.shape)
-            #print(torch.mean(embedding, dim=0).shape)
-            #mean_emb[i,:] = torch.mean(embedding, dim=0)
         MMD_values = torch.zeros(n,n)
     
         for i in range(n):
             for j in range(i,n):
 
-                MMD_values[i][j] = rbf_mmd(embeddings[i], embeddings[j], 1)
-                #MMD_values[i][j] = torch.dot(torch.mean(embeddings[i], dim=0), torch.mean(embeddings[j], dim=0))
+                MMD_values[i][j] = 1-rbf_mmd(embeddings[i], embeddings[j], sigma=1, biased=True)
                 MMD_values[j][i] = MMD_values[i][j]
-        #MMD_values = compute_mmd_gram_matrix(embeddings)
 
-        output = self.svm(MMD_values)
-        #output = self.svm_test(mean_emb)
+        #print(MMD_values)
+        alpha_matrix = torch.ger(self.alphas, self.alphas)
 
-        return output
-    
-'''
-class SVM(nn.Module):
-    """
-    Linear Support Vector Machine
-    -----------------------------
-    This SVM is a subclass of the PyTorch nn module that
-    implements the Linear  function. The  size  of  each 
-    input sample is input_dimension and output sample  is 1.
-    """
-    def __init__(self, input_dimension):
-        super().__init__()  # Call the init function of nn.Module
-        self.fully_connected = nn.Linear(input_dimension, 1)  # Implement the Linear function
-        
-    def forward(self, x):
-        fwd = self.fully_connected(x)  # Forward pass
-        return fwd
-'''
+        diag = torch.diag(MMD_values)
+        row_dots = torch.matmul(MMD_values, self.alphas)
+        total_dot = torch.dot(torch.flatten(alpha_matrix), torch.flatten(MMD_values))
+
+        dists = diag - 2*row_dots + total_dot
+
+        #scores = torch.clamp(dists - (self.radius**2), min=0)
+
+        return dists
