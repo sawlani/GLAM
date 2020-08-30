@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mmd_util import compute_mmd_gram_matrix, rbf_mmd
+from mmd_util import compute_mmd_gram_matrix, rbf_mmd, rbf_mmd_old
 
 class MLP2layer(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -50,9 +50,6 @@ class GraphCNN_SVDD(nn.Module):
         self.neighbor_pooling_type = neighbor_pooling_type
         self.learn_eps = learn_eps
         self.eps = nn.Parameter(torch.zeros(self.num_layers-1))
-
-        #self.radius = nn.Parameter(torch.tensor(0.1))
-        self.alphas = torch.tensor([1/num_graphs]*num_graphs, requires_grad=False)
 
         ###List of MLPs
         self.mlps = torch.nn.ModuleList()
@@ -215,7 +212,7 @@ class GraphCNN_SVDD(nn.Module):
         h = F.relu(h)
         return h
 
-    def get_hidden_rep(self, batch_graph, output_layer):
+    def forward(self, batch_graph, output_layer):
         X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
         
         if self.neighbor_pooling_type == "max":
@@ -239,8 +236,8 @@ class GraphCNN_SVDD(nn.Module):
 
             hidden_rep.append(h)
 
-        hidden_rep = torch.cat(hidden_rep, axis=1)
-        #hidden_rep = hidden_rep[output_layer]
+        #hidden_rep = torch.cat(hidden_rep, axis=1)
+        hidden_rep = hidden_rep[output_layer]
     
         index = 0
         embeddings = []
@@ -251,29 +248,3 @@ class GraphCNN_SVDD(nn.Module):
 
 
         return embeddings
-
-    
-    def forward(self, batch_graph):
-        embeddings = self.get_hidden_rep(batch_graph, 1)
-
-        n = len(embeddings)
-        MMD_values = torch.zeros(n,n)
-    
-        for i in range(n):
-            for j in range(i,n):
-
-                MMD_values[i][j] = 1-rbf_mmd(embeddings[i], embeddings[j], sigma=1, biased=True)
-                MMD_values[j][i] = MMD_values[i][j]
-
-        #print(MMD_values)
-        alpha_matrix = torch.ger(self.alphas, self.alphas)
-
-        diag = torch.diag(MMD_values)
-        row_dots = torch.matmul(MMD_values, self.alphas)
-        total_dot = torch.dot(torch.flatten(alpha_matrix), torch.flatten(MMD_values))
-
-        dists = diag - 2*row_dots + total_dot
-
-        #scores = torch.clamp(dists - (self.radius**2), min=0)
-
-        return dists

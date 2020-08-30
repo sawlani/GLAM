@@ -10,7 +10,7 @@ from sklearn.metrics import precision_recall_fscore_support, average_precision_s
 
 from util import load_synthetic_data, load_chem_data, separate_data
 from mmd_util import compute_mmd_gram_matrix
-from models.graphcnn_svdd_nystrom import GraphCNN_SVDD
+from models.graphcnn_svdd import GraphCNN_SVDD
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"

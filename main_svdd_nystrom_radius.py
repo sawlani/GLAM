@@ -10,7 +10,7 @@ from sklearn.metrics import precision_recall_fscore_support, average_precision_s
 
 from util import load_synthetic_data, load_chem_data, separate_data
 from mmd_util import compute_mmd_gram_matrix
-from models.graphcnn_svdd_nystrom import GraphCNN_SVDD
+from models.graphcnn_svdd import GraphCNN_SVDD
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
@@ -19,7 +19,7 @@ def get_radius(dist: torch.Tensor, nu: float):
     """Optimally solve for radius R via the (1-nu)-quantile of distances."""
     return np.quantile(np.sqrt(dist.clone().data.cpu().numpy()), 1 - nu)
 
-def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_size = 10, radius, nu):
+def train(args, model, device, train_graphs, optimizer, epoch, radius, nu, k = 20, batch_size = 10):
     model.eval()
     
     N = len(train_graphs)
@@ -62,71 +62,38 @@ def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_siz
         dists_batch_list.append(dists_batch)
 
     #F_full = torch.cat(F_list, axis=0)
-
     #center = torch.mean(F_full, dim=0)
-
     #dists = torch.sum((F_full - center)**2, dim=1)
-    dists = torch.cat(dists_batch_list, axis=0)
     
+    dists = torch.cat(dists_batch_list, axis=0)
     print(dists)
     
     scores = torch.clamp(dists - (radius**2), min=0)
 
-    #weight = model.svm.weight.squeeze()
-    #loss = 20*torch.mean(scores) + (R**2)
+    loss = (1/nu)*torch.mean(scores) + (radius**2)
 
-    loss = torch.mean(scores)
-    #loss += torch.dot(weight,weight)/ 2.0
-
-    
     if optimizer is not None:
         optimizer.zero_grad()
         loss.backward()
     
         optimizer.step()
         
-    #if epoch >= 3:
-    #    R.data = torch.tensor(get_radius(dists, 0.05))
+    radius.data = torch.tensor(get_radius(dists, 0.05))
+    print(radius)
     
     loss = loss.detach().cpu().numpy()
-    dists = dists.detach().cpu().numpy()
-    return loss, dists
+    scores = scores.detach().cpu().numpy()
+    return loss, scores
 
-def get_hidden_layer(model, graphs, layer):
-    model.eval()
-
-    embeddings = []
-    for graph in graphs:
-
-        embedding = model.get_hidden_rep([graph], layer)[0]
-        embeddings.append(embedding)
-        
-    return embeddings
-
-
-def test(args, dists, device, test_graphs):
-    #model.eval()
-
-    '''
-    output = pass_data_iteratively(model, train_graphs)
-    pred = output.max(1, keepdim=True)[1]
-    labels = torch.LongTensor([graph.label for graph in train_graphs]).to(device)
-    correct = pred.eq(labels.view_as(pred)).sum().cpu().item()
-    acc_train = correct / float(len(train_graphs))
-    '''
-
-    #output = model(test_graphs)
-    #scores = output.detach().numpy()
-    #preds = (scores > 0)
+def test(args, scores, device, test_graphs):
+    
+    preds = (scores > 0)
     
     labels = torch.LongTensor([graph.label for graph in test_graphs]).to(device)
     
-
-    #p, r, f, _ = precision_recall_fscore_support(labels, preds, average="binary")
-    score = average_precision_score(labels, dists)
-    #return p,r,f
-    return score
-
+    p, r, f, _ = precision_recall_fscore_support(labels, preds, average="binary")
+    return p,r,f
+    
 def main():
     # Training settings
     # Note: Hyper-parameters need to be tuned in order to obtain results reported in the paper.
@@ -139,8 +106,8 @@ def main():
                         help='input batch size for training (default: 1)')
     parser.add_argument('--iters_per_epoch', type=int, default=50,
                         help='number of iterations per each epoch (default: 50)')
-    parser.add_argument('--epochs', type=int, default=50,
-                        help='number of epochs to train (default: 50)')
+    parser.add_argument('--epochs', type=int, default=10,
+                        help='number of epochs to train (default: 10)')
     parser.add_argument('--lr', type=float, default=0.01,
                         help='learning rate (default: 0.01)')
     parser.add_argument('--seed', type=int, default=0,
@@ -185,7 +152,7 @@ def main():
 
     R = torch.tensor(0)
 
-    for k in range(20,30,10):
+    for k in range(20,120,20):
     
         model = GraphCNN_SVDD(len(train_graphs), args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
     
@@ -196,15 +163,14 @@ def main():
         aps = []
         for epoch in range(1, args.epochs + 1):
             
-            avg_loss, dists = train(args, model, device, train_graphs, optimizer, epoch, k, batch_size=10, radius=R, nu=0.05)
+            avg_loss, scores = train(args, model, device, train_graphs, optimizer, epoch, radius=R, nu=0.05, k=k, batch_size=10)
             print("Training loss: %f" % (avg_loss))
             
             scheduler.step()
 
-            score = test(args, dists, device, test_graphs)
-            #print("Precision: %f, Recall: %f, F-1 score: %f" % (p, r,f))
-            print("Avg Precision Score: %f" % score)
-            aps.append(score)
+            p,r,f = test(args, scores, device, test_graphs)
+            print("Precision: %f, Recall: %f, F-1 score: %f" % (p, r,f))
+            aps.append(f)
 
         plt.plot(list(range(1, args.epochs + 1)), aps, label="k="+str(k))
 
