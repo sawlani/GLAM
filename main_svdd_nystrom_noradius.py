@@ -20,7 +20,7 @@ def get_radius(dist: torch.Tensor, nu: float):
     """Optimally solve for radius R via the (1-nu)-quantile of distances."""
     return np.quantile(np.sqrt(dist.clone().data.cpu().numpy()), 1 - nu)
 
-def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_size = 10):
+def train(args, model, device, train_graphs, optimizer, epoch, k, batch_size, variance_multiplier):
     model.eval()
     #torch.autograd.set_detect_anomaly(True)
     
@@ -44,43 +44,48 @@ def train(args, model, device, train_graphs, optimizer, epoch, k = 20, batch_siz
 
     F_Z = torch.matmul(U_Z,torch.diag(eigenvalues**0.5))
 
-    approx_center = torch.mean(F_Z, dim=0)
+    approx_center = torch.median(F_Z, dim=0).values
 
     #F_list = []
     
     dists_batch_list = []
-    total_loss = 0
+    #total_loss = 0
     no_of_batches = 0
+
+    mean_sum = 0
+    mean_squared_sum = 0
+
+
 
     for start in range(0, N, batch_size):
         print(".", end='')
+        no_of_batches += 1
         batch_graph = train_graphs[start:start+batch_size]
 
         R_embeddings = model(batch_graph,1)
         K_RZ = compute_mmd_gram_matrix(R_embeddings, Z_embeddings, gamma=gamma)
         F = torch.matmul(K_RZ, T)
         
+        #print(torch.std(K_RZ))
+        #print(torch.std(F))
         #F_list.append(F)
+        mean_sum += torch.mean(K_RZ)
+        mean_squared_sum += torch.mean(K_RZ**2)
 
         dists_batch = torch.sum((F - approx_center)**2, dim=1)
         dists_batch_list.append(dists_batch)
-        #print(dists_batch)
+        
 
-        #loss = torch.mean(dists_batch)
-        #total_loss += loss.detach().cpu().numpy()
-        #no_of_batches += 1
-    
-        #optimizer.zero_grad()
-        #loss.backward(retain_graph=True)
-        #optimizer.step()
-
-    #F_full = torch.cat(F_list, axis=0)
-    #center = torch.mean(F_full, dim=0)
-    #dists = torch.sum((F_full - center)**2, dim=1)
-
+    variance = (mean_squared_sum/no_of_batches) - (mean_sum/no_of_batches)**2
     dists = torch.cat(dists_batch_list, axis=0)
     print(dists)
-    loss = torch.mean(dists)
+    loss1 = torch.mean(dists)
+    loss2 =  - variance
+    loss3 = -torch.mean(torch.topk(dists, 5).values)
+    print(loss1, loss2, loss3)
+
+    #loss = loss1 + loss2*variance_multiplier + loss3
+    loss = loss1 + loss2*variance_multiplier
 
     if optimizer is not None:
         optimizer.zero_grad()
@@ -173,7 +178,9 @@ def main():
 
     #train_graphs, test_graphs = graphs, graphs
 
-    for k in range(20,120,20):
+    k = 40
+    batch_size = 10
+    for variance_multiplier in [0,1,2,4,8]:
     
         model = GraphCNN_SVDD(len(graphs), args.num_layers, args.num_mlp_layers, graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
     
@@ -184,7 +191,7 @@ def main():
         aps = []
         for epoch in range(1, args.epochs + 1):
             
-            avg_loss, dists = train(args, model, device, graphs, optimizer, epoch, k)
+            avg_loss, dists = train(args, model, device, graphs, optimizer, epoch, k, batch_size, variance_multiplier)
             print("Training loss: %f" % (avg_loss))
             
             scheduler.step()
@@ -194,7 +201,7 @@ def main():
             print("Avg Precision Score: %f" % score)
             aps.append(score)
 
-        plt.plot(list(range(1, args.epochs + 1)), aps, label="k="+str(k))
+        plt.plot(list(range(1, args.epochs + 1)), aps, label="varmul="+str(variance_multiplier))
 
     plt.grid()
     plt.legend()
