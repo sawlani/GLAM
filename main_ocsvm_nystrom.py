@@ -79,12 +79,12 @@ def train(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer
     loss = (1/nu)*torch.mean(scores) # - radius
 
     svm_optimizer.zero_grad()
-    #model_optimizer.zero_grad()
+    model_optimizer.zero_grad()
     
     loss.backward()
     
     svm_optimizer.step()
-    #model_optimizer.step()
+    model_optimizer.step()
         
     loss = loss.detach().cpu().numpy()
     scores = scores.detach().cpu().numpy()
@@ -158,42 +158,63 @@ def main():
     k = 40
     nu = 0.05
 
-    for R in [0.05,0.1,0.15,0.2,0.25,0.3]:
+    losses_zero = []
+    losses_one = []
+    losses_two = []
+    losses_three = []
+    losses_four = []
+    
+    for R in np.arange(0.02,0.4,0.02):
         print("radius=" + str(R))
         model = GraphCNN_SVDD(len(train_graphs), args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
         svm = SVM(k)
 
-        model_optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=0.5)
+        model_optimizer = optim.Adam(model.parameters(), lr=args.lr)
         svm_optimizer = optim.Adam(svm.parameters(), lr=args.lr, weight_decay=0.5)
         #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
 
-        losses = []
-        total_losses = []
+        #losses = []
+        #total_losses = []
         aps = []
         for epoch in range(1, args.epochs + 1):
             
             avg_loss, scores = train(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer, epoch, radius=R, nu=nu, k=k, batch_size=args.batch_size)
-            print("\nTraining loss: %f" % (avg_loss))
+            #print("\nTraining loss: %f" % (avg_loss))
             #l2_loss = 0
             #for param in model.parameters() :
             #    l2_loss += 0.5 * torch.sum(param ** 2)
             ##scheduler.step()
             #print("L2 loss: %f" % (l2_loss))
 
-            svm_loss = 0
-            for param in svm.parameters() :
-                svm_loss += 0.5 * torch.sum(param ** 2)
             #scheduler.step()
-            print("SVM loss: %f" % (svm_loss))
+            #print("SVM loss: %f" % (svm_loss))
 
             p,r,f = test(args, scores, device, test_graphs)
             print("Precision: %f, Recall: %f, F-1 score: %f" % (p, r,f))
             aps.append(f)
-            losses.append(avg_loss - R)
-            total_losses.append(svm_loss.detach()+avg_loss - R)
+            #losses.append(avg_loss - R)
+            #total_losses.append(svm_loss.detach()+avg_loss - R)
 
-        plt.plot(list(range(1, args.epochs + 1)), losses, label="radius="+str(R))
-        plt.plot(list(range(1, args.epochs + 1)), total_losses, linestyle='dashed', label="radius="+str(R))
+        svm_loss = 0
+        for param in svm.parameters() :
+            svm_loss += 0.5 * torch.sum(param ** 2)
+        model_loss = 0
+        for param in model.parameters() :
+            model_loss += 0.5 * torch.sum(param ** 2)
+        losses_zero.append(model_loss.detach())
+        losses_one.append(svm_loss.detach())
+        losses_two.append(avg_loss)
+        losses_three.append(avg_loss-R)
+        losses_four.append(model_loss.detach()+svm_loss.detach()+avg_loss-R)
+        print(svm_loss.detach(), avg_loss, -R)
+        #plt.plot(list(range(1, args.epochs + 1)), losses, label="radius="+str(R))
+        #plt.plot(list(range(1, args.epochs + 1)), total_losses, linestyle='dashed', label="radius="+str(R))
+
+    plt.plot(list(np.arange(0.02,0.4,0.02)), losses_zero, label="model regularizer term")
+    plt.plot(list(np.arange(0.02,0.4,0.02)), losses_one, label="SVM regularizer term")
+    plt.plot(list(np.arange(0.02,0.4,0.02)), losses_two, label="threshold loss term")
+    plt.plot(list(np.arange(0.02,0.4,0.02)), losses_three, label="loss-radius")
+    plt.plot(list(np.arange(0.02,0.4,0.02)), losses_four, label="total loss")
 
     plt.grid()
     plt.legend()

@@ -10,14 +10,12 @@ def rbf_mmd_old(X, Y, gamma="median"):
         from sklearn.metrics.pairwise import euclidean_distances
         sub = lambda feats, n: feats[np.random.choice(
             feats.shape[0], min(feats.shape[0], n), replace=False)]
-        #Z = np.r_[sub(X, median_samples // 2), sub(Y, median_samples // 2)]
+        
         Z = torch.cat((sub(X, median_samples // 2), sub(Y, median_samples // 2)),0)
         D2 = torch.cdist(Z,Z,2)**2
-        #D2 = euclidean_distances(Z, squared=True)
         upper = D2[np.triu_indices_from(D2, k=1)]
         kernel_width = torch.median(upper)
         gamma = 1/kernel_width
-        # sigma = median / sqrt(2); works better, sometimes at least
         del Z, D2, upper
     
     XX = torch.mm(X, torch.transpose(X, 0, 1))
@@ -27,6 +25,8 @@ def rbf_mmd_old(X, Y, gamma="median"):
     Y_sqnorms = torch.diagonal(YY)
 
     K_XY = torch.exp(-gamma * (-2 * XY + X_sqnorms[:, np.newaxis] + Y_sqnorms[np.newaxis, :]))
+    #K_XY = torch.exp(-gamma * (torch.cdist(X,Y)**2))
+    #K_XY = XY**2
     
     mmd = K_XY.mean()
 
@@ -46,7 +46,7 @@ def rbf_mmd(X, Y, gamma="median"):
         gamma = 1/kernel_width
         del Z, D2, upper
     
-    return torch.mean(torch.exp(-1*gamma* torch.cdist(X,Y)**2))
+    return torch.mean(torch.exp(-gamma* torch.cdist(X,Y)**2))
 
 def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
     
@@ -68,21 +68,7 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
                 MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], X_embeddings[j], gamma)
                 MMD_values[j][i] = MMD_values[i][j]
     
+        if not (torch.symeig(MMD_values).eigenvalues > 0).all():
+            print("Matrix not Positive Definite")
+
     return MMD_values
-
-'''
-def mmd_score(graphs, MMD_scores):
-    l = len(graphs)
-    labels = torch.zeros_like(MMD_scores)
-    #print(l, MMD_scores.shape)
-
-    for i in range(l):
-        for j in range(l):
-            if graphs[i].label != graphs[j].label:
-                labels[i,j] = 1
-    
-    MMD_scores = torch.flatten(MMD_scores)
-    labels = torch.flatten(labels)
-    
-    return metrics.roc_auc_score(labels, MMD_scores)
-'''
