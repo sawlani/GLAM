@@ -110,6 +110,8 @@ def main():
     					help='let the input node features be the degree of nodes (heuristics for unlabeled graph)')
     parser.add_argument('--dataset', type = str, default = "mixhop", choices=["mixhop", "chem", "contaminated"],
                                         help='dataset used')
+    parser.add_argument('--no_of_graphs', type = int, default = 100,
+                                        help='no of graphs generated')
     args = parser.parse_args()
 
     #set up seeds and gpu device
@@ -120,16 +122,18 @@ def main():
         torch.cuda.manual_seed_all(0)
 
     if args.dataset == "mixhop":
-        graphs, num_classes = load_synthetic_data(number_of_graphs=400, h_inlier=0.4, h_outlier=0.6)
+        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=0.4, h_outlier=0.6)
         
     elif args.dataset == "contaminated":
-        graphs, num_classes = load_synthetic_data_contaminated(100)
+        graphs, num_classes = load_synthetic_data_contaminated(number_of_graphs=args.no_of_graphs)
     else:
         graphs, num_classes = load_chem_data()
 
     ##10-fold cross validation. Conduct an experiment on the fold specified by args.fold_idx.
     #train_graphs, test_graphs = separate_data(graphs, args.seed, args.fold_idx)
-    train_graphs, test_graphs = graphs[:100] + graphs[300:], graphs[100:300]
+    graphs = np.random.permutation(graphs)
+
+    train_graphs, test_graphs = graphs[:args.no_of_graphs//2], graphs[args.no_of_graphs//2:]
 
     no_of_node_features = train_graphs[0].node_features.shape[1]
 

@@ -238,8 +238,10 @@ class GraphCNN_SVDD(nn.Module):
 
             hidden_rep.append(h)
 
-        #hidden_rep = torch.cat(hidden_rep, axis=1)
-        hidden_rep = hidden_rep[output_layer]
+        if output_layer == "all":
+            hidden_rep = torch.cat(hidden_rep, axis=1)
+        else:
+            hidden_rep = hidden_rep[output_layer]
     
         index = 0
         embeddings = []
