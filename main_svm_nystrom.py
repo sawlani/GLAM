@@ -17,6 +17,7 @@ from models.svm import SVM
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
+'''
 def train(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer, epoch, k, layer="all"):
     model.train()
     
@@ -81,9 +82,9 @@ def train(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer
     average_loss = loss_accum/total_iters
     
     return average_loss
+'''
 
-
-def train2(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer, epoch, k, layer="all"):
+def train(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer, epoch, k, layer="all"):
     model.train()
     
     loss_accum = 0
@@ -131,8 +132,6 @@ def train2(args, model, svm, device, train_graphs, model_optimizer, svm_optimize
 
         svm_optimizer.step()
         model_optimizer.step()
-
-        R_embeddings = None
         
         loss = loss.detach().cpu().numpy()
         loss_accum += loss
@@ -163,12 +162,7 @@ def pass_data_iteratively(model, svm, graphs, Z_embeddings, T, gamma, layer, min
 def test(args, model, svm, device, test_graphs, k, layer="all"):
     model.eval()
 
-    N = len(test_graphs)
-    
-    a = list(range(N))
-    np.random.shuffle(a)
-    Z_index = a[:k]
-    Z = [test_graphs[i] for i in Z_index]
+    Z = np.random.permutation(test_graphs)[:k]
 
     Z_embeddings = model(Z, layer)
     
@@ -226,6 +220,10 @@ def main():
                                         help='no of graphs generated')
     parser.add_argument('--layer', type = str, default = "all",
                                         help='which hidden layer used as embedding')
+    parser.add_argument('--h_inlier', type=float, default=0.3,
+                        help='inlier homophily (default: 0.3)')
+    parser.add_argument('--h_outlier', type=float, default=0.7,
+                        help='inlier homophily (default: 0.7)')
     args = parser.parse_args()
 
     #set up seeds and gpu device
@@ -235,8 +233,11 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
 
+    if args.layer != "all":
+        args.layer = int(args.layer)
+
     if args.dataset == "mixhop":
-        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=0.3, h_outlier=0.7)
+        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=args.h_inlier, h_outlier=args.h_outlier)
         
     elif args.dataset == "contaminated":
         graphs, num_classes = load_synthetic_data_contaminated(number_of_graphs=args.no_of_graphs)
@@ -263,7 +264,7 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         
-        avg_loss = train2(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer, epoch, k)
+        avg_loss = train(args, model, svm, device, train_graphs, model_optimizer, svm_optimizer, epoch, k)
         print("Training loss: %f" % (avg_loss))
         
         #scheduler.step()

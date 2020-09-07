@@ -118,6 +118,10 @@ def main():
                                         help='no of graphs generated')
     parser.add_argument('--layer', type = str, default = "all",
                                         help='which hidden layer used as embedding')
+    parser.add_argument('--h_inlier', type=float, default=0.3,
+                        help='inlier homophily (default: 0.3)')
+    parser.add_argument('--h_outlier', type=float, default=0.7,
+                        help='inlier homophily (default: 0.7)')
     args = parser.parse_args()
 
     #set up seeds and gpu device
@@ -131,7 +135,7 @@ def main():
         args.layer = int(args.layer)
 
     if args.dataset == "mixhop":
-        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=0.3, h_outlier=0.7)
+        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=args.h_inlier, h_outlier=args.h_outlier)
         
     elif args.dataset == "contaminated":
         graphs, num_classes = load_synthetic_data_contaminated(number_of_graphs=args.no_of_graphs)

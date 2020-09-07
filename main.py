@@ -112,6 +112,10 @@ def main():
                                         help='dataset used')
     parser.add_argument('--no_of_graphs', type = int, default = 100,
                                         help='no of graphs generated')
+    parser.add_argument('--h_inlier', type=float, default=0.3,
+                        help='inlier homophily (default: 0.3)')
+    parser.add_argument('--h_outlier', type=float, default=0.7,
+                        help='inlier homophily (default: 0.7)')
     args = parser.parse_args()
 
     #set up seeds and gpu device
@@ -122,7 +126,7 @@ def main():
         torch.cuda.manual_seed_all(0)
 
     if args.dataset == "mixhop":
-        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=0.4, h_outlier=0.6)
+        graphs, num_classes = load_synthetic_data(number_of_graphs=args.no_of_graphs, h_inlier=args.h_inlier, h_outlier=args.h_outlier)
         
     elif args.dataset == "contaminated":
         graphs, num_classes = load_synthetic_data_contaminated(number_of_graphs=args.no_of_graphs)
