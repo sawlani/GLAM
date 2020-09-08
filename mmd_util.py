@@ -50,6 +50,9 @@ def rbf_mmd(X, Y, gamma="median"):
 
 def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
     
+    if gamma==0:
+        print("zero gamma")
+
     if Y_embeddings:
         n1 = len(X_embeddings)
         n2 = len(Y_embeddings)
