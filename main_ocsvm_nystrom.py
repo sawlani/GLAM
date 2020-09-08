@@ -164,7 +164,7 @@ def main():
     losses_three = []
     losses_four = []
     
-    for R in np.arange(0.02,0.4,0.02):
+    for R in np.arange(0.1,20.1,0.1):
         print("radius=" + str(R))
         model = GraphCNN_SVDD(len(train_graphs), args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
         svm = SVM(k)

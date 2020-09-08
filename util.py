@@ -32,24 +32,6 @@ class S2VGraph(object):
         #  [v1 v2 v3 ... vm]]
 
 
-'''
-def separate_data(graph_list, seed, fold_idx):
-    assert 0 <= fold_idx and fold_idx < 10, "fold_idx must be from 0 to 9."
-    skf = StratifiedKFold(n_splits=10, shuffle = True, random_state = seed)
-
-    labels = [graph.label for graph in graph_list]
-    idx_list = []
-    for idx in skf.split(np.zeros(len(labels)), labels):
-        idx_list.append(idx)
-    train_idx, test_idx = idx_list[fold_idx]
-
-    train_graph_list = [graph_list[i] for i in train_idx]
-    test_graph_list = [graph_list[i] for i in test_idx]
-
-    return train_graph_list, test_graph_list
-
-'''
-
 def random_split_counts(total_number, no_of_splits):
     split_indices = np.sort(np.random.choice(total_number,no_of_splits-1, replace = False)+1)
     split_indices = np.insert(split_indices, 0, 0)
@@ -70,7 +52,7 @@ def draw_graph(G, name):
     plt.savefig(name)
     plt.close()
 
-def load_synthetic_data(number_of_graphs = 100, h_inlier=0.4, h_outlier=0.6, outlier_ratio=0.5, n_min = 50, n_max = 150, no_of_tags = 2, type1 = "mixhop", type2 = "mixhop"):
+def load_synthetic_data(number_of_graphs = 100, h_inlier=0, h_outlier=1, outlier_ratio=0.5, n_min = 50, n_max = 150, no_of_tags = 5, type1 = "mixhop", type2 = "mixhop"):
     print('generating data')
     g_list = []
     
@@ -82,7 +64,7 @@ def load_synthetic_data(number_of_graphs = 100, h_inlier=0.4, h_outlier=0.6, out
         tag_counts = random_split_counts(n, no_of_tags)
 
         if type1 == "mixhop":
-            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 5, 10, h_inlier)
+            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, h_inlier)
             tags = [g.nodes[v]['color'] for v in g.nodes]
         
         g_list.append(S2VGraph(g, 0, node_tags=tags))
@@ -94,7 +76,7 @@ def load_synthetic_data(number_of_graphs = 100, h_inlier=0.4, h_outlier=0.6, out
         tag_counts = random_split_counts(n, no_of_tags)
 
         if type2 == "mixhop":
-            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 5, 10, h_outlier)
+            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, h_outlier)
             tags = [g.nodes[v]['color'] for v in g.nodes]
         
         g_list.append(S2VGraph(g, 1, node_tags=tags))
@@ -130,7 +112,7 @@ def load_synthetic_data(number_of_graphs = 100, h_inlier=0.4, h_outlier=0.6, out
 
     return g_list, 2
 
-def load_synthetic_data_contaminated(number_of_graphs, outlier_ratio=0.5, n_min = 50, n_max = 150, no_of_tags = 2, type1 = "mixhop", type2 = "mixhop"):
+def load_synthetic_data_contaminated(number_of_graphs, outlier_ratio=0.5, n_min = 50, n_max = 150, no_of_tags = 5, type1 = "mixhop", type2 = "mixhop"):
     print('generating data')
     g_list = []
     
@@ -243,8 +225,8 @@ def separate_data(graph_list, seed, fold_idx=0, splits=10):
     return train_graph_list, test_graph_list
 
 
-G = MixhopGraphGenerator([25,25], heteroWeightsExponent=1.0).generate_graph_contaminated(50, 5, 10, 0.5, contamination=1.0)
-draw_graph(G, "uncle")
+#G = MixhopGraphGenerator([25,25], heteroWeightsExponent=1.0).generate_graph_contaminated(50, 5, 10, 0.5, contamination=1.0)
+#draw_graph(G, "uncle")
 
-G = MixhopGraphGenerator([25,25], heteroWeightsExponent=1.0).generate_graph(50, 5, 10, 0.5)
-draw_graph(G, "aunty")
+#G = MixhopGraphGenerator([25,25], heteroWeightsExponent=1.0).generate_graph(50, 5, 10, 0.5)
+#draw_graph(G, "aunty")

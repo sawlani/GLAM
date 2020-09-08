@@ -30,23 +30,18 @@ class GraphCNN_SVDD(nn.Module):
     def __init__(self, num_layers, input_dim, hidden_dim, output_dim, learn_eps, neighbor_pooling_type, device):
         '''
             num_layers: number of layers in the neural networks (INCLUDING the input layer)
-            num_mlp_layers: number of layers in mlps (EXCLUDING the input layer)
             input_dim: dimensionality of input features
             hidden_dim: dimensionality of hidden units at ALL layers
             output_dim: number of classes for prediction
-            #final_dropout: dropout ratio on the final linear layer
             learn_eps: If True, learn epsilon to distinguish center nodes from neighboring nodes. If False, aggregate neighbors and center nodes altogether. 
             neighbor_pooling_type: how to aggregate neighbors (mean, average, or max)
-            #graph_pooling_type: how to aggregate entire nodes in a graph (mean, average)
             device: which device to use
         '''
 
         super(GraphCNN_SVDD, self).__init__()
 
-        #self.final_dropout = final_dropout
         self.device = device
         self.num_layers = num_layers
-        #self.graph_pooling_type = graph_pooling_type
         self.neighbor_pooling_type = neighbor_pooling_type
         self.learn_eps = learn_eps
         self.eps = nn.Parameter(torch.zeros(self.num_layers-1))
@@ -129,35 +124,6 @@ class GraphCNN_SVDD(nn.Module):
         return Adj_block.to(self.device)
 
 
-    '''
-    def __preprocess_graphpool(self, batch_graph):
-        ###create sum or average pooling sparse matrix over entire nodes in each graph (num graphs x num nodes)
-        
-        start_idx = [0]
-
-        #compute the padded neighbor list
-        for i, graph in enumerate(batch_graph):
-            start_idx.append(start_idx[i] + len(graph.g))
-
-        idx = []
-        elem = []
-        for i, graph in enumerate(batch_graph):
-            ###average pooling
-            if self.graph_pooling_type == "average":
-                elem.extend([1./len(graph.g)]*len(graph.g))
-            
-            else:
-            ###sum pooling
-                elem.extend([1]*len(graph.g))
-
-            idx.extend([[i, j] for j in range(start_idx[i], start_idx[i+1], 1)])
-        elem = torch.FloatTensor(elem)
-        idx = torch.LongTensor(idx).transpose(0,1)
-        graph_pool = torch.sparse.FloatTensor(idx, elem, torch.Size([len(batch_graph), start_idx[-1]]))
-        
-        return graph_pool.to(self.device)
-    '''
-
     def maxpool(self, h, padded_neighbor_list):
         ###Element-wise minimum will never affect max-pooling
 
@@ -238,7 +204,7 @@ class GraphCNN_SVDD(nn.Module):
 
             hidden_rep.append(h)
 
-        if output_layer == "all":
+        if output_layer=="all":
             hidden_rep = torch.cat(hidden_rep, axis=1)
         else:
             hidden_rep = hidden_rep[output_layer]
