@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from mmd_util import compute_mmd_gram_matrix, rbf_mmd, rbf_mmd_old
 
 class MLP2layer(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim, bias=False):
         '''
             input_dim: dimensionality of input features
             hidden_dim: dimensionality of hidden units at ALL layers
@@ -14,9 +14,9 @@ class MLP2layer(nn.Module):
     
         super(MLP2layer, self).__init__()
 
-        self.linear_in = nn.Linear(input_dim, hidden_dim)
+        self.linear_in = nn.Linear(input_dim, hidden_dim, bias=bias)
         self.batchnorm = nn.BatchNorm1d(hidden_dim)
-        self.linear_out = nn.Linear(hidden_dim, output_dim)
+        self.linear_out = nn.Linear(hidden_dim, output_dim, bias=bias)
     
     def forward(self, x):
         x = self.linear_in(x)
@@ -61,12 +61,12 @@ class GraphCNN_SVDD(nn.Module):
             self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
 
         #Linear function that maps the hidden representation at dofferemt layers into a prediction score
-        self.linears_prediction = torch.nn.ModuleList()
-        for layer in range(num_layers):
-            if layer == 0:
-                self.linears_prediction.append(nn.Linear(input_dim, output_dim))
-            else:
-                self.linears_prediction.append(nn.Linear(hidden_dim, output_dim))
+        #self.linears_prediction = torch.nn.ModuleList()
+        #for layer in range(num_layers):
+        #    if layer == 0:
+        #        self.linears_prediction.append(nn.Linear(input_dim, output_dim))
+        #    else:
+        #        self.linears_prediction.append(nn.Linear(hidden_dim, output_dim))
 
         
 
