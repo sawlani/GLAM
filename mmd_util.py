@@ -3,22 +3,10 @@ import numpy as np
 from sklearn import metrics
 
 
-def rbf_mmd_old(X, Y, gamma="median"):
+def rbf_mmd_old(X, Y, gamma=None, type="SMM"):
 
-    if gamma == 'median':
-        median_samples = 100
-        from sklearn.metrics.pairwise import euclidean_distances
-        sub = lambda feats, n: feats[np.random.choice(
-            feats.shape[0], min(feats.shape[0], n), replace=False)]
-        #Z = np.r_[sub(X, median_samples // 2), sub(Y, median_samples // 2)]
-        Z = torch.cat((sub(X, median_samples // 2), sub(Y, median_samples // 2)),0)
-        D2 = torch.cdist(Z,Z,2)**2
-        #D2 = euclidean_distances(Z, squared=True)
-        upper = D2[np.triu_indices_from(D2, k=1)]
-        kernel_width = torch.median(upper)
-        gamma = 1/kernel_width
-        # sigma = median / sqrt(2); works better, sometimes at least
-        del Z, D2, upper
+    if gamma == None:
+        gamme = compute_gamma([X,Y])
     
     XX = torch.mm(X, torch.transpose(X, 0, 1))
     XY = torch.mm(X, torch.transpose(Y, 0, 1))
@@ -26,30 +14,30 @@ def rbf_mmd_old(X, Y, gamma="median"):
     X_sqnorms = torch.diagonal(XX)
     Y_sqnorms = torch.diagonal(YY)
 
-    K_XY = torch.exp(-gamma * (-2 * XY + X_sqnorms[:, np.newaxis] + Y_sqnorms[np.newaxis, :]))
     
-    mmd = K_XY.mean()
+    if type=="MMD":
+        K_XY = torch.exp(-gamma * (-2 * XY + X_sqnorms[:, np.newaxis] + Y_sqnorms[np.newaxis, :]))
+        K_XX = torch.exp(-gamma * (-2 * XX + X_sqnorms[:, np.newaxis] + X_sqnorms[np.newaxis, :]))
+        K_YY = torch.exp(-gamma * (-2 * YY + Y_sqnorms[:, np.newaxis] + Y_sqnorms[np.newaxis, :]))
 
-    return mmd
-    
-def rbf_mmd(X, Y, gamma="median"):
+        output = K_XX.mean() + K_YY.mean() - 2 * K_XY.mean()
 
-    if gamma == 'median':
-        median_samples = 100
-        from sklearn.metrics.pairwise import euclidean_distances
-        sub = lambda feats, n: feats[np.random.choice(
-            feats.shape[0], min(feats.shape[0], n), replace=False)]
-        Z = torch.cat((sub(X, median_samples // 2), sub(Y, median_samples // 2)),0)
-        D2 = torch.cdist(Z,Z,2)**2
-        upper = D2[np.triu_indices_from(D2, k=1)]
-        kernel_width = torch.median(upper)
-        gamma = 1/kernel_width
-        del Z, D2, upper
+    elif type=="SMM":
+        K_XY = torch.exp(-gamma * (-2 * XY + X_sqnorms[:, np.newaxis] + Y_sqnorms[np.newaxis, :]))
+        
+        output = K_XY.mean()
+
+    return output
     
+def rbf_mmd(X, Y, gamma):
+    if gamma == None:
+        gamme = compute_gamma([X,Y])
     return torch.mean(torch.exp(-1*gamma* torch.cdist(X,Y)**2))
 
-def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
+def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma=None, type="SMM"):
     
+    if gamma == None:
+        gamma = compute_gamma(X_embeddings)
     if gamma==0:
         print("zero gamma")
 
@@ -60,7 +48,7 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
         
         for i in range(n1):
             for j in range(n2):
-                MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], Y_embeddings[j], gamma)
+                MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], Y_embeddings[j], gamma=gamma, type=type)
     
     else:
         n = len(X_embeddings)
@@ -68,24 +56,18 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma='median'):
         
         for i in range(n):
             for j in range(i,n):
-                MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], X_embeddings[j], gamma)
+                MMD_values[i][j] = rbf_mmd_old(X_embeddings[i], X_embeddings[j], gamma=gamma, type=type)
                 MMD_values[j][i] = MMD_values[i][j]
     
     return MMD_values
 
-'''
-def mmd_score(graphs, MMD_scores):
-    l = len(graphs)
-    labels = torch.zeros_like(MMD_scores)
-    #print(l, MMD_scores.shape)
+def compute_gamma(embeddings):
+    all_vertex_embeddings = torch.cat(embeddings, axis=0).detach()
+    all_vertex_distances = torch.cdist(all_vertex_embeddings, all_vertex_embeddings)**2
+    median_of_distances = torch.median(all_vertex_distances)
+    if median_of_distances <= 1e-4:
+        median_of_distances = 1e-4
+    
+    gamma = 1/median_of_distances
 
-    for i in range(l):
-        for j in range(l):
-            if graphs[i].label != graphs[j].label:
-                labels[i,j] = 1
-    
-    MMD_scores = torch.flatten(MMD_scores)
-    labels = torch.flatten(labels)
-    
-    return metrics.roc_auc_score(labels, MMD_scores)
-'''
+    return gamma
