@@ -17,20 +17,21 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma=None, type="S
     if not Y_embeddings:
         Y_embeddings = X_embeddings
 
+    if gamma == None:
+        gamma = compute_gamma(Y_embeddings)
+    if gamma==0:
+        raise ValueError("Gamma value appears to be 0")
+    
+    # pad with 0s and convert to 3d tensor. 
     X_padded = pad_sequence(X_embeddings, batch_first=True)
     Y_padded = pad_sequence(Y_embeddings, batch_first=True)
 
+    # calculate mask to be able to exclude padded 0s later while computing mean
     X_ones = [torch.ones(emb.shape[0]) for emb in X_embeddings]
     Y_ones = [torch.ones(emb.shape[0]) for emb in Y_embeddings]
-
     X_ones_padded = pad_sequence(X_ones, batch_first=True)
     Y_ones_padded = pad_sequence(Y_ones, batch_first=True)
     mask = X_ones_padded[:,None,:,None]*Y_ones_padded[None,:,None,:]
-
-    if gamma == None:
-        gamma = compute_gamma(X_embeddings)
-    if gamma==0:
-        print("zero gamma")
 
     XY = torch.matmul(X_padded[:,None,:,:], torch.transpose(Y_padded[None,:,:,:], -1, -2))
 
@@ -41,6 +42,8 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma=None, type="S
         K_XY = torch.exp(-gamma * (-2 * XY + X_sq[:,None,:,None] + Y_sq[None,:,None,:]))
 
         masked_means = torch.sum(K_XY*mask,(2,3))/torch.sum(mask,(2,3))
+    else:
+        raise ValueError("This type is not supported (yet)")
     
     return masked_means
 
