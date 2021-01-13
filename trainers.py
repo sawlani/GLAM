@@ -37,23 +37,24 @@ class MMDTrainer:
         total_iters = 0
 
         for batch in train_loader:
+            #print(batch)
             #print(".", end='')
             
-            Z_embeddings = []
-            for batch in self.landmark_loader:
-                batch_embeddings = self.model(batch)
-                Z_embeddings = Z_embeddings + batch_embeddings
+            landmark_embeddings = []
+            for landmark_batch in self.landmark_loader:
+                landmark_batch_embeddings = self.model(landmark_batch)
+                landmark_embeddings = landmark_embeddings + landmark_batch_embeddings
 
-            gamma = compute_gamma(Z_embeddings, device=self.device).detach() # no backpropagation for gamma
+            gamma = compute_gamma(landmark_embeddings, device=self.device).detach() # no backpropagation for gamma
             #print(gamma)
             
             
             train_embeddings = self.model(batch)
-            K_trainZ = compute_mmd_gram_matrix(train_embeddings, Z_embeddings, gamma=gamma, device=self.device).to(self.device)
+            K_trainZ = compute_mmd_gram_matrix(train_embeddings, landmark_embeddings, gamma=gamma, device=self.device).to(self.device)
 
             if self.nystrom == "LLSVM":
                 
-                K_Z = compute_mmd_gram_matrix(Z_embeddings, gamma=gamma, device=self.device).to(self.device)
+                K_Z = compute_mmd_gram_matrix(landmark_embeddings, gamma=gamma, device=self.device).to(self.device)
                 eigenvalues, U_Z = torch.symeig(K_Z, eigenvectors=True)
 
                 #removed smallest 2/3 eigenvalues due to numerical instability
@@ -126,18 +127,18 @@ class MMDTrainer:
         
         with torch.no_grad():
 
-            Z_embeddings = []
+            landmark_embeddings = []
 
-            for batch in self.landmark_loader:
-                batch_embeddings = self.model(batch)
-                Z_embeddings = Z_embeddings + batch_embeddings
+            for landmark_batch in self.landmark_loader:
+                landmark_batch_embeddings = self.model(landmark_batch)
+                landmark_embeddings = landmark_embeddings + landmark_batch_embeddings
 
-            gamma = compute_gamma(Z_embeddings, device=self.device) # no backpropagation for gamma
+            gamma = compute_gamma(landmark_embeddings, device=self.device) # no backpropagation for gamma
             #print(gamma)
 
             if self.nystrom == "LLSVM":
                 
-                K_Z = compute_mmd_gram_matrix(Z_embeddings, gamma=gamma, device=self.device).to(self.device)
+                K_Z = compute_mmd_gram_matrix(landmark_embeddings, gamma=gamma, device=self.device).to(self.device)
                 eigenvalues, U_Z = torch.symeig(K_Z, eigenvectors=True)
 
                 #removed smallest 2/3 eigenvalues due to numerical instability
@@ -158,7 +159,7 @@ class MMDTrainer:
             for batch in test_loader:
 
                 R_embeddings = self.model(batch)
-                K_RZ = compute_mmd_gram_matrix(R_embeddings, Z_embeddings, gamma=gamma, device=self.device).to(self.device)
+                K_RZ = compute_mmd_gram_matrix(R_embeddings, landmark_embeddings, gamma=gamma, device=self.device).to(self.device)
                 
                 if self.nystrom == "LLSVM":
                     F = torch.matmul(K_RZ, T)

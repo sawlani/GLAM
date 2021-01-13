@@ -63,14 +63,19 @@ def load_data(data_name, down_class=0, down_rate=1, dense=False, classify=False,
     newcoin = np.random.default_rng(seed)
     torch.manual_seed(seed)
     
-    if data_name == 'mixhop':
+    if os.path.exists(data_name + "_" + str(seed) + ".pkl"):
+        with open(data_name + "_" + str(seed) + ".pkl", 'rb') as f:
+            dataset_raw = pickle.load(f)
+    elif data_name == 'mixhop':
         NUM = 500
         dataset_raw = load_synthetic_data(num_train=NUM, num_test_inlier=NUM, num_test_outlier=int(NUM*down_rate), seed=seed)
-        with open("mixhop.pkl", 'wb') as f:
+        with open(data_name + "_" + str(seed) + ".pkl", 'wb') as f:
             pickle.dump(dataset_raw, f)
-    elif data_name == 'saved':
-        with open("mixhop.pkl", 'rb') as f:
-            dataset_raw = pickle.load(f)
+    elif data_name == 'mixhop_hard':
+        NUM = 500
+        dataset_raw = load_synthetic_data(num_train=NUM, num_test_inlier=NUM, num_test_outlier=int(NUM*down_rate), seed=seed, type1="mixhop-contaminated", type2="mixhop", h_inlier=0.5, h_outlier=0.5)
+        with open(data_name + "_" + str(seed) + ".pkl", 'wb') as f:
+            pickle.dump(dataset_raw, f)
     elif data_name in ['MNIST', 'CIFAR10']:
         dataset_raw = GNNBenchmarkDataset(root=DATA_PATH, name=data_name)
     elif 'ogbg' in data_name:
@@ -91,8 +96,8 @@ def load_data(data_name, down_class=0, down_rate=1, dense=False, classify=False,
     min_nodes, max_nodes = min(num_nodes_graphs), max(num_nodes_graphs)
     if max_nodes >= 10000:
         max_nodes = 10000
-    print("min nodes, max nodes:", min_nodes, max_nodes)
-    print("#labels: ", dataset_raw.num_classes)
+    #print("min nodes, max nodes:", min_nodes, max_nodes)
+    #print("#labels: ", dataset_raw.num_classes)
     
     
     # 2. Calculate down_rate for multi_class dataset: h
@@ -104,7 +109,7 @@ def load_data(data_name, down_class=0, down_rate=1, dense=False, classify=False,
     No = len(dataset_raw) - Ni
 
     down_rate = 0.5*down_rate*Ni/No
-    print("down rate:", down_rate)
+    #print("down rate:", down_rate)
 
     filter = DownsamplingFilter(min_nodes, max_nodes, down_class, down_rate, dataset_raw.num_classes, reverse=True, coin=newcoin)
     indices = [i for i, data in enumerate(dataset_raw) if filter(data)]
@@ -187,6 +192,10 @@ def create_loaders(data_name, batch_size=32, down_class=0, down_rate=1, dense=Fa
     random.seed(landmark_seed)
     landmark_set = random.sample(train_dataset, k)
 
+    #sizes = [g.x.shape[0] for g in landmark_set]
+    #print(max(sizes))
+
+    '''
     print("Original distribution of classes in dataset:")
     labels = np.array([data.y.item() for data in orig_dataset])
     label_dist = ['%d'% (labels==c).sum() for c in range(orig_dataset.num_classes)]
@@ -204,21 +213,22 @@ def create_loaders(data_name, batch_size=32, down_class=0, down_rate=1, dense=Fa
     label_dist = ['%d'% (labels==c).sum() for c in [0,1]]
     print("Dataset: %s, Number of graphs: %d, Class distribution %s, Num of (one-hot encoded) features %d"%(
             data_name, len(dataset), label_dist, dataset.num_features))
-    
-    print("After downsampling and test-train splitting, distribution of classes in TRAIN dataset:")
+    '''
+    print("After downsampling and test-train splitting, distribution of classes:")
     labels = np.array([data.y.item() for data in train_dataset])
     label_dist = ['%d'% (labels==c).sum() for c in [0,1]]
-    print("Dataset: %s, Number of graphs: %d, Class distribution %s"%(
-            data_name, len(train_dataset), label_dist))
+    print("TRAIN: Number of graphs: %d, Class distribution %s"%(
+            len(train_dataset), label_dist))
     
-    print("After downsampling and test-train splitting, distribution of classes in TEST dataset:")
+    #print("After downsampling and test-train splitting, distribution of classes in TEST dataset:")
     labels = np.array([data.y.item() for data in test_dataset])
     label_dist = ['%d'% (labels==c).sum() for c in [0,1]]
-    print("Dataset: %s, Number of graphs: %d, Class distribution %s"%(
-            data_name, len(test_dataset), label_dist))
+    print("TEST: Number of graphs: %d, Class distribution %s"%(
+            len(test_dataset), label_dist))
     
+
     Loader = DenseDataLoader if dense else DataLoader
-    num_workers = 4
+    num_workers = 0
     train_loader = Loader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers)
     test_loader = Loader(test_dataset, batch_size=batch_size, shuffle=False,  pin_memory=True, num_workers=num_workers)
     landmark_loader = Loader(landmark_set, batch_size=batch_size, shuffle=False,  pin_memory=True, num_workers=num_workers)

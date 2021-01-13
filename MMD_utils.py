@@ -1,5 +1,8 @@
+#MMD_utils.py
+
 import torch
 from torch.nn.utils.rnn import pad_sequence
+from torch_scatter import scatter as sctr
 
 
 def compute_gamma(embeddings, device=torch.device("cpu")):
@@ -13,10 +16,15 @@ def compute_gamma(embeddings, device=torch.device("cpu")):
 
     return gamma
 
-def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma=None, type="SMM", device=torch.device("cpu")):
+def compute_mmd_gram_matrix_4d(X_embeddings, Y_embeddings=None, gamma=None, type="SMM", sampled=False, num_samples=128, device=torch.device("cpu")):
     
+    if sampled:
+        X_embeddings = [emb[torch.randperm(emb.shape[0])[:num_samples], :] for emb in X_embeddings]
+
     if not Y_embeddings:
         Y_embeddings = X_embeddings
+    elif sampled:
+        Y_embeddings = [emb[torch.randperm(emb.shape[0])[:num_samples], :] for emb in Y_embeddings]
 
     if gamma == None:
         gamma = compute_gamma(Y_embeddings)
@@ -56,3 +64,45 @@ def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma=None, type="S
         raise ValueError("This type is not supported (yet)")
     
     return masked_means
+
+def compute_mmd_gram_matrix(X_embeddings, Y_embeddings=None, gamma=None, type="SMM", device=torch.device("cpu")):
+    
+    if not Y_embeddings:
+        Y_embeddings = X_embeddings
+
+    if gamma == None:
+        gamma = compute_gamma(Y_embeddings)
+    if gamma==0:
+        raise ValueError("Gamma value appears to be 0")
+    
+    X_all = torch.cat(X_embeddings).to(device)
+    Y_all = torch.cat(Y_embeddings).to(device)
+    
+    X_sq = torch.squeeze(torch.matmul(X_all[:,None,:],X_all[:,:,None]))
+    XY = torch.matmul(X_all, torch.transpose(Y_all, 0,1))
+    del X_all
+    
+    Y_sq = torch.squeeze(torch.matmul(Y_all[:,None,:],Y_all[:,:,None]))
+    del Y_all
+    
+    Z = torch.exp(-gamma * (-2*XY + X_sq[:,None] + Y_sq[None,:]))
+    del X_sq, Y_sq, XY
+
+    X_indices = []
+    for i, emb in enumerate(X_embeddings):
+        X_indices += [i]*emb.shape[0]
+
+    X_indices = torch.tensor(X_indices).to(device)
+
+    temp = sctr(Z, X_indices, dim=0, reduce="mean")
+    del Z, X_indices
+
+    Y_indices = []
+    for i, emb in enumerate(Y_embeddings):
+        Y_indices += [i]*emb.shape[0]
+
+    Y_indices = torch.tensor(Y_indices).to(device)
+
+    MMDs = sctr(temp, Y_indices, dim=1, reduce="mean")
+
+    return MMDs

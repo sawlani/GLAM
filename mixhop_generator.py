@@ -148,7 +148,7 @@ class MixhopGraphGenerator(GraphGenerator):
 		assert len(list(nx.selfloop_edges(G))) == 0
 		return G
 
-	def generate_graph_contaminated(self, n, m, m0, h, contamination = 0.2):
+	def generate_graph_contaminated(self, n, m, m0, h, contamination = 1.0):
 		'''
 		n: Target size for the generated network
 		m: number of edges added with each new node
@@ -199,9 +199,9 @@ class MixhopGraphGenerator(GraphGenerator):
 
 			r = np.random.uniform()
 			if r < contamination/2:
-				changed_h = h + 0.25
+				changed_h = h + 0.4
 			elif r < contamination:
-				changed_h = h - 0.25
+				changed_h = h - 0.4
 			else:
 				changed_h = h
 			us = self.get_neighbors(G, m, col, changed_h)

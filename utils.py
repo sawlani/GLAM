@@ -62,6 +62,8 @@ def load_synthetic_data(num_train=500, num_test_inlier=500, num_test_outlier=25,
 
         if type1 == "mixhop":
             g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, h_inlier)
+        elif type1 == "mixhop-contaminated":
+            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0).generate_graph_contaminated(n, 2, 10, h_inlier)
             #tags = [g.nodes[v]['color'] for v in g.nodes]
         
         g = from_networkx(g)
@@ -76,6 +78,8 @@ def load_synthetic_data(num_train=500, num_test_inlier=500, num_test_outlier=25,
 
         if type2 == "mixhop":
             g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, h_outlier)
+        elif type2 == "mixhop-contaminated":
+            g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0).generate_graph_contaminated(n, 2, 10, h_outlier)
             #tags = [g.nodes[v]['color'] for v in g.nodes]
 
         g = from_networkx(g)
