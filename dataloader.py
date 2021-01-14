@@ -1,3 +1,5 @@
+#dataloader.py
+
 import torch, os
 import numpy as np
 import random
@@ -76,6 +78,11 @@ def load_data(data_name, down_class=0, down_rate=1, dense=False, classify=False,
         dataset_raw = load_synthetic_data(num_train=NUM, num_test_inlier=NUM, num_test_outlier=int(NUM*down_rate), seed=seed, type1="mixhop-contaminated", type2="mixhop", h_inlier=0.5, h_outlier=0.5)
         with open(data_name + "_" + str(seed) + ".pkl", 'wb') as f:
             pickle.dump(dataset_raw, f)
+    elif data_name == 'mixhop_disjoint':
+        NUM = 500
+        dataset_raw = load_synthetic_data(num_train=NUM, num_test_inlier=NUM, num_test_outlier=int(NUM*down_rate), seed=seed, type1="mixhop-disjoint", type2="mixhop", h_inlier=0.5, h_outlier=0.5)
+        with open(data_name + "_" + str(seed) + ".pkl", 'wb') as f:
+            pickle.dump(dataset_raw, f)
     elif data_name in ['MNIST', 'CIFAR10']:
         dataset_raw = GNNBenchmarkDataset(root=DATA_PATH, name=data_name)
     elif 'ogbg' in data_name:
@@ -130,7 +137,7 @@ def load_data(data_name, down_class=0, down_rate=1, dense=False, classify=False,
 
     # add transforms which will be conducted when draw each elements from the dataset
     if dataset.data.x is None:
-        # print('!!!')
+        print('using degrees as labels')
         max_degree = 0
         degs = []
         for data in dataset_raw: # ATTENTION: use dataset_raw instead of downsampled version!
@@ -217,15 +224,13 @@ def create_loaders(data_name, batch_size=32, down_class=0, down_rate=1, dense=Fa
     print("After downsampling and test-train splitting, distribution of classes:")
     labels = np.array([data.y.item() for data in train_dataset])
     label_dist = ['%d'% (labels==c).sum() for c in [0,1]]
-    print("TRAIN: Number of graphs: %d, Class distribution %s"%(
-            len(train_dataset), label_dist))
+    print("TRAIN: Number of graphs: %d, Class distribution %s"%(len(train_dataset), label_dist))
     
     #print("After downsampling and test-train splitting, distribution of classes in TEST dataset:")
     labels = np.array([data.y.item() for data in test_dataset])
     label_dist = ['%d'% (labels==c).sum() for c in [0,1]]
-    print("TEST: Number of graphs: %d, Class distribution %s"%(
-            len(test_dataset), label_dist))
-    
+    print("TEST: Number of graphs: %d, Class distribution %s"%(len(test_dataset), label_dist))
+    print("Number of node features: %d" %(train_dataset[0].num_features))
 
     Loader = DenseDataLoader if dense else DataLoader
     num_workers = 0
@@ -233,5 +238,4 @@ def create_loaders(data_name, batch_size=32, down_class=0, down_rate=1, dense=Fa
     test_loader = Loader(test_dataset, batch_size=batch_size, shuffle=False,  pin_memory=True, num_workers=num_workers)
     landmark_loader = Loader(landmark_set, batch_size=batch_size, shuffle=False,  pin_memory=True, num_workers=num_workers)
 
-    
-    return train_loader, test_loader, landmark_loader, dataset_raw[0].num_features
+    return train_loader, test_loader, landmark_loader, train_dataset[0].num_features

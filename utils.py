@@ -1,3 +1,5 @@
+#utils.py
+
 import numpy as np
 import torch
 
@@ -58,12 +60,19 @@ def load_synthetic_data(num_train=500, num_test_inlier=500, num_test_outlier=25,
     for i in range(num_train+num_test_inlier):
         
         n = np.random.randint(n_min, n_max)
-        tag_counts = random_split_counts(n, no_of_tags)
-
+        
         if type1 == "mixhop":
+            tag_counts = random_split_counts(n, no_of_tags)
             g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, h_inlier)
         elif type1 == "mixhop-contaminated":
+            tag_counts = random_split_counts(n, no_of_tags)
             g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0).generate_graph_contaminated(n, 2, 10, h_inlier)
+        elif type1 == "mixhop-disjoint":
+            tag_counts_1 = random_split_counts(n//2, no_of_tags)
+            g1 = MixhopGraphGenerator(tag_counts_1, heteroWeightsExponent=1.0)(n//2, 2, 10, h_inlier+0.2)
+            tag_counts_2 = random_split_counts(n//2, no_of_tags)
+            g2 = MixhopGraphGenerator(tag_counts_2, heteroWeightsExponent=1.0)(n//2, 2, 10, h_inlier-0.2)
+            g = nx.disjoint_union(g1,g2)
             #tags = [g.nodes[v]['color'] for v in g.nodes]
         
         g = from_networkx(g)
@@ -74,14 +83,21 @@ def load_synthetic_data(num_train=500, num_test_inlier=500, num_test_outlier=25,
     for i in range(num_test_outlier):
         
         n = np.random.randint(n_min, n_max)
-        tag_counts = random_split_counts(n, no_of_tags)
-
+        
         if type2 == "mixhop":
+            tag_counts = random_split_counts(n, no_of_tags)
             g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0)(n, 2, 10, h_outlier)
         elif type2 == "mixhop-contaminated":
+            tag_counts = random_split_counts(n, no_of_tags)
             g = MixhopGraphGenerator(tag_counts, heteroWeightsExponent=1.0).generate_graph_contaminated(n, 2, 10, h_outlier)
+        elif type2 == "mixhop-disjoint":
+            tag_counts_1 = random_split_counts(n//2, no_of_tags)
+            g1 = MixhopGraphGenerator(tag_counts_1, heteroWeightsExponent=1.0)(n//2, 2, 10, h_outlier+0.2)
+            tag_counts_2 = random_split_counts(n//2, no_of_tags)
+            g2 = MixhopGraphGenerator(tag_counts_2, heteroWeightsExponent=1.0)(n//2, 2, 10, h_outlier-0.2)
+            g = nx.disjoint_union(g1,g2)
             #tags = [g.nodes[v]['color'] for v in g.nodes]
-
+        
         g = from_networkx(g)
         g.y = torch.tensor([1])
 

@@ -1,3 +1,5 @@
+#mixhop_generator.py
+
 import pickle
 import networkx as nx
 import numpy as np
@@ -182,7 +184,14 @@ class MixhopGraphGenerator(GraphGenerator):
 				if h != 0 and h != 1:
 					next_neighbor = v - 1
 				else:
-					next_n = self.get_neighbors(G, 1, next_color, h)
+					r = np.random.uniform()
+					if r < contamination/2:
+						changed_h = h + 0.4
+					elif r < contamination:
+						changed_h = h - 0.4
+					else:
+						changed_h = h
+					next_n = self.get_neighbors(G, 1, next_color, changed_h)
 					if next_n is not None:
 						next_neighbor = next_n[0]
 					else:
