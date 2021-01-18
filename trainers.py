@@ -1,3 +1,5 @@
+#trainers.py
+
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 
@@ -62,7 +64,7 @@ class MMDTrainer:
                 eigenvalues = eigenvalues[-no_of_eigens//3:]
                 
                 # if eigenvalues still negative, adjust - values small enough so that it does not affect
-                m = min(eigenvalues)
+                m = min(eigenvalues).detach()
                 if m < 0:
                     eigenvalues = eigenvalues - 2*m
                 elif m == 0:

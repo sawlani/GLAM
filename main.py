@@ -1,5 +1,6 @@
 #main.py
 
+import os
 import sys
 import pickle
 import matplotlib.pyplot as plt
@@ -22,35 +23,15 @@ from types import SimpleNamespace
 
 def run_experiment(
     data = "saved", data_seed=1213, down_cls=0, down_rate=0.05,
-    alpha=1.0, beta=0.0, epochs=150, model_seed=0, landmark_seed=100, num_layers=1,
-    device=0, aggregation="MMD", nystrom="LLSVM", bias=False, hidden_dim=64, lr=0.2, weight_decay=1e-5, batch = 64
+    alpha=1.0, beta=0.0, epochs=150, model_seed=0, landmark_seed=100, num_layers=1, landmark_set_size=4,
+    device=0, aggregation="MMD", nystrom="LLSVM", bias=False, hidden_dim=64, lr=0.1, weight_decay=1e-5, batch = 64
     ):
 
-    filename = ""
-    filename += data
-    filename += str(data_seed)
-    filename += "_seed_m"
-    filename += str(model_seed)
-    filename += "l"
-    filename += str(landmark_seed)
-    filename += "_"
-    filename += "LR"
-    filename += str(lr)
-    filename += "_"
-    filename += "WD"
-    filename += "%.1E" %(weight_decay)
-    filename += "_"
-    filename += str(num_layers)
-    filename += "lyr"
-    #filename += "_a"
-    #filename += str(alpha)
-    #filename += "_b"
-    #filename += str(beta)
+    filename = data + str(data_seed) + "_m" + str(model_seed) + "_l(" +str(landmark_set_size) + ")" + str(landmark_seed) + "_LR" + str(lr) + "_WD" + "%0.0E" %(weight_decay) + "_" + str(num_layers) + "lyr"
     if bias:
-        filename += "_bias"
+        filename += "_bias.png"
     else:
-        filename += "_nobias"
-    filename += ".png"
+        filename += "_nobias.png"
 
     
     device = torch.device("cuda:" + str(device)) if torch.cuda.is_available() else torch.device("cpu")
@@ -62,7 +43,8 @@ def run_experiment(
                             down_rate=down_rate, 
                             dense=False,
                             data_seed=data_seed,
-                            landmark_seed=landmark_seed)
+                            landmark_seed=landmark_seed,
+                            landmark_set_size=landmark_set_size)
 
     torch.manual_seed(model_seed)
     if torch.cuda.is_available():
@@ -271,40 +253,66 @@ args = parser.parse_args()
 
 D = {}
 
-lrs = [args.lr, args.lr*2]
-weight_decays = [args.weight_decay, args.weight_decay*10]
-model_seeds = [args.model_seed+i for i in range(args.model_seed_number)]
-landmark_seeds = [args.landmark_seed+i for i in range(args.landmark_seed_number)]
+lrs = [args.lr, args.lr/10]
+weight_decays = [args.weight_decay/10, args.weight_decay, args.weight_decay*10]
 layercounts = [1,2,4]
+if args.aggregation == "MMD":
+    landmark_set_sizes = [4,8,16]
+else:
+    landmark_set_sizes = [4] # actual size doesn't matter, will not be used
+    args.landmark_seed_number = 1
+landmark_seeds = [args.landmark_seed+i for i in range(args.landmark_seed_number)]
+model_seeds = [args.model_seed+i for i in range(args.model_seed_number)]
+
+loading_old_data = True
 
 for lr in lrs:
     for weight_decay in weight_decays:
-        for model_seed in model_seeds:
-            for landmark_seed in landmark_seeds:
-                for layercount in layercounts:
-                    print("Running experiment for LR=%f, weight decay = %.1E, landmark seed = %d, model seed = %d, number of layers = %d" % (lr, weight_decay, landmark_seed, model_seed, layercount))
-                    info = run_experiment(
-                        data=args.data,
-                        data_seed=args.data_seed,
-                        down_cls=args.down_cls,
-                        down_rate=args.down_rate,
-                        alpha=args.alpha,
-                        beta=args.beta,
-                        epochs=args.epochs,
-                        model_seed=model_seed,
-                        landmark_seed=landmark_seed,
-                        num_layers=layercount,
-                        device=args.device,
-                        aggregation=args.aggregation,
-                        nystrom=args.nystrom,
-                        bias=args.bias,
-                        hidden_dim=args.hidden_dim,
-                        lr=lr,
-                        weight_decay=weight_decay,
-                        batch=args.batch
-                        )
-                    
-                    D[(lr,weight_decay,landmark_seed,model_seed, layercount)] = info
+        for layercount in layercounts:
+            for landmark_set_size in landmark_set_sizes:
+                for landmark_seed in landmark_seeds:
+                    for model_seed in model_seeds:
+                
+                        filename = args.data + str(args.data_seed) + "_m" + str(model_seed) + "_l(" +str(landmark_set_size) + ")" + str(landmark_seed) + "_LR" + str(lr) + "_WD" + "%0.0E" %(weight_decay) + "_" + str(layercount) + "lyr"
+                        if args.bias:
+                            filename += "_bias.png"
+                        else:
+                            filename += "_nobias.png"
 
-with open('all_models_' + args.data + '_' + str(args.data_seed) + '.pkl', 'wb') as f:
-    pickle.dump(D, f)
+                        if loading_old_data and os.path.exists(filename):
+                            print("SKIPPING experiment for LR=%f, weight decay = %.1E, landmark seed = %d, model seed = %d, number of layers = %d, landmark set size = %d log N" % (lr, weight_decay, landmark_seed, model_seed, layercount, landmark_set_size))
+                        else:
+                            loading_old_data = False
+                            if os.path.exists('all_models_' + args.data + '_' + str(args.data_seed) + '.pkl'):
+                                with open('all_models_' + args.data + '_' + str(args.data_seed) + '.pkl', 'rb') as f:
+                                    D = pickle.load(f)
+                            else:
+                                D = {}
+                            
+                            print("Running experiment for LR=%f, weight decay = %.1E, landmark seed = %d, model seed = %d, number of layers = %d, landmark set size = %d log N" % (lr, weight_decay, landmark_seed, model_seed, layercount, landmark_set_size))
+                            info = run_experiment(
+                                data=args.data,
+                                data_seed=args.data_seed,
+                                down_cls=args.down_cls,
+                                down_rate=args.down_rate,
+                                alpha=args.alpha,
+                                beta=args.beta,
+                                epochs=args.epochs,
+                                model_seed=model_seed,
+                                landmark_seed=landmark_seed,
+                                num_layers=layercount,
+                                landmark_set_size=landmark_set_size,
+                                device=args.device,
+                                aggregation=args.aggregation,
+                                nystrom=args.nystrom,
+                                bias=args.bias,
+                                hidden_dim=args.hidden_dim,
+                                lr=lr,
+                                weight_decay=weight_decay,
+                                batch=args.batch
+                                )
+                            
+                            D[(lr,weight_decay,landmark_set_size,landmark_seed,model_seed, layercount)] = info
+
+                            with open('all_models_' + args.data + '_' + str(args.data_seed) + '.pkl', 'wb') as f:
+                                pickle.dump(D, f)
