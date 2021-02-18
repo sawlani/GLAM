@@ -1,0 +1,6 @@
+LR 0.1 0.01
+WD 1e-4 1e-3
+layers 1 2 4
+landmark_seeds 666 667 668
+model_seeds 0 1 2
+landmark_set_sizes 2 4
