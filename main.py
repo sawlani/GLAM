@@ -135,9 +135,9 @@ parser.add_argument('--aggregation', type=str, default="MMD", choices=["MMD", "M
                     help='Type of graph level aggregation (default: MMD)')
 
 parser.add_argument('--use_config', action="store_true",
-                                    help='Whether to use configuration from config.txt')
-parser.add_argument('--config_file', type=str, default="config.txt",
-                    help='Name of configuration file (default: config.txt)')
+                                    help='Whether to use configuration from a file')
+parser.add_argument('--config_file', type=str, default="configs/config.txt",
+                    help='Name of configuration file (default: configs/config.txt)')
 
 
 parser.add_argument('--lr', type=float, default=0.1,

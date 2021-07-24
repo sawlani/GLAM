@@ -13,13 +13,9 @@ import pickle
 
 from utils import load_synthetic_data
 
-DATA_PATH = 'datasets'
+DATA_PATH = 'downloads'
 if not os.path.isdir(DATA_PATH):
     os.mkdir(DATA_PATH)
-
-INDICES_PATH = 'indices'
-if not os.path.isdir(INDICES_PATH):
-    os.mkdir(INDICES_PATH)
 
 class RemoveLastKFeatures(object):
     r"""Removes the last k features.
@@ -130,6 +126,16 @@ def load_data(data_name, down_class=0, down_rate=1, use_node_labels=True, use_no
     if max_nodes >= 10000:
         max_nodes = 10000
 
+
+    if use_node_labels and (not use_node_attr):
+    	INDICES_PATH = "data/labeled"
+    elif (not use_node_labels) and use_node_attr:
+    	INDICES_PATH = "data/attributed"
+    else:
+    	raise ValueError("Exactly ONE of use_node_attr and use_node_labels must be True")
+
+    if not os.path.isdir(INDICES_PATH):
+	    os.mkdir(INDICES_PATH)
 
     if os.path.exists(INDICES_PATH + "/" + data_name + "_" + str(seed) + "(in" + str(down_class) + ")" + "_INDICES.pkl"):
         print("Using saved indices to extract TRAIN and TEST datasets...")
